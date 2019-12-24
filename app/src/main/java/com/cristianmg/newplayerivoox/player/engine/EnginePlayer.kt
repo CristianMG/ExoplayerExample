@@ -3,9 +3,10 @@ package com.cristianmg.newplayerivoox.player.engine
 import com.cristianmg.newplayerivoox.player.Track
 
 interface EnginePlayer {
-    var currentTrack: Track?
+    val currentTrack: Track?
     var callback:EngineCallback?
 
+    fun initPlayer()
     fun play(track: Track)
     fun play(trackList:List<Track>)
 

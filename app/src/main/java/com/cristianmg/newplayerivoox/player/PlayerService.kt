@@ -1,6 +1,7 @@
 package com.cristianmg.newplayerivoox.player
 
 
+import android.app.Notification
 import android.app.Service
 import android.content.Intent
 import android.os.Binder
@@ -8,16 +9,20 @@ import android.os.IBinder
 import com.cristianmg.newplayerivoox.player.engine.EngineCallback
 import com.cristianmg.newplayerivoox.player.engine.EnginePlayer
 import com.cristianmg.newplayerivoox.player.engine.exoplayer.ExoplayerEngine
+import com.cristianmg.newplayerivoox.player.queue.TracksQueueEngine
+import timber.log.Timber
 
 
 class PlayerService : Service(), EngineCallback {
 
-    private val enginePlayer: EnginePlayer  = loadEnginePlayer()
+    private lateinit var enginePlayer: EnginePlayer
+    private lateinit var queue: TracksQueueEngine
 
-
-    fun play(track: Track) {
-        enginePlayer.play(track)
+    override fun onCreate() {
+        super.onCreate()
+        enginePlayer.initPlayer()
     }
+
 
     /**
      * The current track finish to play
@@ -43,19 +48,27 @@ class PlayerService : Service(), EngineCallback {
 
     }
 
-
     /**
      * The engine is always the same
-     * @return EnginePlayer
      */
-    private fun loadEnginePlayer(): EnginePlayer {
-        return ExoplayerEngine(this, this)
+    private fun loadEngines() {
+        val engine = ExoplayerEngine(this, this)
+        enginePlayer = engine
+        queue = engine
     }
 
-
-
-
-
+    override fun onNotificationChanged(
+        notificationId: Int,
+        notification: Notification,
+        ongoing: Boolean
+    ) {
+        Timber.d("onNotificationChanged notificationId$notificationId , ongoing $ongoing")
+        if (ongoing) {
+            startForeground(notificationId, notification)
+        } else {
+            stopForeground(false)
+        }
+    }
 
     /**
      * Binder options service
