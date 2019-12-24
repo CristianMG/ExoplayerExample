@@ -7,12 +7,13 @@ import android.os.Binder
 import android.os.IBinder
 import com.cristianmg.newplayerivoox.player.engine.EngineCallback
 import com.cristianmg.newplayerivoox.player.engine.EnginePlayer
-import com.cristianmg.newplayerivoox.player.engine.ExoplayerEngine
+import com.cristianmg.newplayerivoox.player.engine.exoplayer.ExoplayerEngine
 
 
 class PlayerService : Service(), EngineCallback {
 
-    private var enginePlayer: EnginePlayer = loadEnginePlayer()
+    private val enginePlayer: EnginePlayer  = loadEnginePlayer()
+
 
     fun play(track: Track) {
         enginePlayer.play(track)
@@ -48,7 +49,7 @@ class PlayerService : Service(), EngineCallback {
      * @return EnginePlayer
      */
     private fun loadEnginePlayer(): EnginePlayer {
-        return ExoplayerEngine(this,this)
+        return ExoplayerEngine(this, this)
     }
 
 
