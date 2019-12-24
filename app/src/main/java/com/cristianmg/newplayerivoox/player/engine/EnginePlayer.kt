@@ -7,9 +7,6 @@ interface EnginePlayer {
     var callback:EngineCallback?
 
     fun initPlayer()
-    fun play(track: Track)
-    fun play(trackList:List<Track>)
-
     fun release()
     fun isPlaying(): Boolean
 }

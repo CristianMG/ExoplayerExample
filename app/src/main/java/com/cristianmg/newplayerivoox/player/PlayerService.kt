@@ -9,6 +9,7 @@ import android.os.IBinder
 import com.cristianmg.newplayerivoox.player.engine.EngineCallback
 import com.cristianmg.newplayerivoox.player.engine.EnginePlayer
 import com.cristianmg.newplayerivoox.player.engine.exoplayer.ExoplayerEngine
+import com.cristianmg.newplayerivoox.player.queue.TracksQueue
 import com.cristianmg.newplayerivoox.player.queue.TracksQueueEngine
 import timber.log.Timber
 
@@ -16,10 +17,15 @@ import timber.log.Timber
 class PlayerService : Service(), EngineCallback {
 
     private lateinit var enginePlayer: EnginePlayer
-    private lateinit var queue: TracksQueueEngine
+    private lateinit var queueEngine: TracksQueueEngine
+
+    val queue: TracksQueue by lazy {
+        TracksQueue(queueEngine)
+    }
 
     override fun onCreate() {
         super.onCreate()
+        loadEngines()
         enginePlayer.initPlayer()
     }
 
@@ -54,7 +60,7 @@ class PlayerService : Service(), EngineCallback {
     private fun loadEngines() {
         val engine = ExoplayerEngine(this, this)
         enginePlayer = engine
-        queue = engine
+        queueEngine = engine
     }
 
     override fun onNotificationChanged(

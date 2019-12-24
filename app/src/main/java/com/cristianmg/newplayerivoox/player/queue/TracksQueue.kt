@@ -1,6 +1,13 @@
 package com.cristianmg.newplayerivoox.player.queue
 
-class TracksQueue {
+import com.cristianmg.newplayerivoox.player.Track
 
+
+class TracksQueue(val queueEngine: TracksQueueEngine) {
+
+
+    fun addToQueue(track: Track) {
+        queueEngine.addToQueue(track, clearOldPlayList = true)
+    }
 
 }

@@ -15,7 +15,7 @@ class MainActivity : BaseBindingActivity() {
         setContentView(R.layout.activity_main)
 
         btRandom.setOnClickListener {
-            mService?.play(object : Track {
+            mService?.queue?.addToQueue(object : Track {
 
                 override fun getContentText(): String? = "Ejemplo contenido"
 

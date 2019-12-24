@@ -22,7 +22,6 @@ import timber.log.Timber
 import com.google.android.exoplayer2.ui.PlayerNotificationManager
 import com.google.android.exoplayer2.source.ConcatenatingMediaSource
 
-
 /**
  * Implementation of exoplayer engine @see https://exoplayer.dev/hello-world.html
  * @property context Context context service
