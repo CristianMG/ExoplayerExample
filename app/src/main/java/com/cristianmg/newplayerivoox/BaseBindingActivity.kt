@@ -27,6 +27,8 @@ abstract class BaseBindingActivity : AppCompatActivity() {
 
     }
 
+    abstract fun onServiceBinder()
+
     /** Defines callbacks for service binding, passed to bindService()  */
     private val connection = object : ServiceConnection {
 
@@ -35,8 +37,11 @@ abstract class BaseBindingActivity : AppCompatActivity() {
             val binder = service as PlayerService.LocalBinder
             mService = binder.getService()
             mBound = true
+
+            onServiceBinder()
             Log.d("MainActivity", "ServiceConnected")
         }
+
 
         override fun onServiceDisconnected(arg0: ComponentName) {
             mBound = false

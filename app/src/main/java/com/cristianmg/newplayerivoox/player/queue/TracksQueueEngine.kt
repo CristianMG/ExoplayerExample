@@ -19,5 +19,10 @@ interface TracksQueueEngine {
      * @param playWhenReady Boolean Player should be execute when ready
      * @param clearOldPlayList Boolean the old playlist should be cleared
      */
-    fun addToQueue(tracks: List<Track>, playWhenReady: Boolean, clearOldPlayList: Boolean = false)
+    fun addToQueue(tracks: List<Track>, playWhenReady: Boolean = true, clearOldPlayList: Boolean = false)
+
+    fun isPlaying(): Boolean
+    fun hasNext(): Boolean
+    fun next()
+    fun clear()
 }

@@ -10,4 +10,8 @@ class TracksQueue(val queueEngine: TracksQueueEngine) {
         queueEngine.addToQueue(track, clearOldPlayList = true)
     }
 
+    fun addToQueue(track: List<Track>) {
+        queueEngine.addToQueue(track, clearOldPlayList = true)
+    }
+
 }

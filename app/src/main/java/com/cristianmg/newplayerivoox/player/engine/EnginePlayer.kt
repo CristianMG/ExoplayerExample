@@ -8,5 +8,4 @@ interface EnginePlayer {
 
     fun initPlayer()
     fun release()
-    fun isPlaying(): Boolean
 }

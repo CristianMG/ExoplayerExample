@@ -2,6 +2,7 @@ package com.cristianmg.newplayerivoox.player.engine
 
 import android.app.Notification
 import com.cristianmg.newplayerivoox.player.Track
+import java.lang.Exception
 
 
 /**
@@ -9,11 +10,14 @@ import com.cristianmg.newplayerivoox.player.Track
  */
 interface EngineCallback {
     fun onLoadingChange(boolean: Boolean)
-    fun OnPlayTrack(track: Track)
-    fun OnFinishPlay(track: Track)
+    fun onPlayTrack(track: Track)
+    fun onFinishPlay(track: Track)
     fun onNotificationChanged(
         notificationId: Int,
         notification: Notification,
         ongoing: Boolean
     )
+
+    fun preconditionsPlaybackFailed(error: Exception)
+    suspend fun shouldStartPlayback(currentTrack: Track?): Exception?
 }
