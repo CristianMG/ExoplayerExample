@@ -7,6 +7,7 @@ import android.os.Binder
 import android.os.IBinder
 import com.cristianmg.newplayerivoox.player.engine.EngineCallback
 import com.cristianmg.newplayerivoox.player.engine.EnginePlayer
+import com.cristianmg.newplayerivoox.player.engine.EnginePlayerError
 import com.cristianmg.newplayerivoox.player.engine.exoplayer.ExoplayerEngine
 import com.cristianmg.newplayerivoox.player.queue.TracksQueue
 import com.cristianmg.newplayerivoox.player.queue.TracksQueueEngine
@@ -67,9 +68,9 @@ class PlayerService : Service(), EngineCallback {
         }
     }
 
-    override suspend fun shouldStartPlayback(currentTrack: Track?): Exception? {
-        if (currentTrack?.getName() == "3")
-            return IllegalStateException("3 is not permitted as a title")
+    override suspend fun checkPreconditions(currentTrack: Track?): EnginePlayerError? {
+/*        if (currentTrack?.getName() == "3")
+            return IllegalStateException("3 is not permitted as a title")*/
         return null
     }
 
@@ -77,22 +78,26 @@ class PlayerService : Service(), EngineCallback {
      * Why we have to do if preconditions were failed
      * @param error Exception
      */
-    override fun preconditionsPlaybackFailed(error: Exception) {
+    override fun preconditionsPlaybackFailed(error: EnginePlayerError) {
         callbackService?.preconditionsPlaybackFailed(error)
         mainScope.launch {
-            if (error is IllegalStateException) {
+
+            /**
+             * We can skip or do another things with the player when the preconditions are failed
+             * **/
+          /*  if (error is IllegalStateException) {
                 if (queueEngine.hasNext()) {
                     queueEngine.next()
                 } else {
                     queueEngine.clear()
                 }
-            }
+            }*/
         }
     }
 
 
     interface ServiceCallback {
-        fun preconditionsPlaybackFailed(illegalStateException: Exception)
+        fun preconditionsPlaybackFailed(illegalStateException: EnginePlayerError)
     }
 
     /**

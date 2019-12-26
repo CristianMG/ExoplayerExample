@@ -158,7 +158,7 @@ class ExoplayerEngine(
                  */
                 try {
                     coroutineIoScope.launch {
-                        val hasError = callback?.shouldStartPlayback(track)
+                        val hasError = callback?.checkPreconditions(track)
                         hasError?.let {
                             callback?.preconditionsPlaybackFailed(it)
                         }

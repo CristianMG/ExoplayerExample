@@ -2,7 +2,6 @@ package com.cristianmg.newplayerivoox.player.engine
 
 import android.app.Notification
 import com.cristianmg.newplayerivoox.player.Track
-import java.lang.Exception
 
 
 /**
@@ -16,6 +15,12 @@ interface EngineCallback {
         ongoing: Boolean
     )
 
-    fun preconditionsPlaybackFailed(error: Exception)
-    suspend fun shouldStartPlayback(currentTrack: Track?): Exception?
+    fun preconditionsPlaybackFailed(error: EnginePlayerError)
+
+    /**
+     * This function avoid to check if any track is valid to playing
+     * @param currentTrack Track? track that will be palyed
+     * @return Exception? error if there is
+     */
+    suspend fun checkPreconditions(currentTrack: Track?): EnginePlayerError?
 }
