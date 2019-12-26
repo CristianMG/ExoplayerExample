@@ -157,11 +157,9 @@ class ExoplayerEngine(
         val cacheDataSourceFactory =
             CacheDataSourceFactory(ExoPlayerCache.simpleCache(context), dataSourceFactory)
 
-
         val mediaSource = ProgressiveMediaSource.Factory(cacheDataSourceFactory)
             .setTag(track)
             .createMediaSource(track.getUri())
-
 
         /***
          * Check conditions to allow user listen audios
@@ -183,16 +181,14 @@ class ExoplayerEngine(
                             callback?.preconditionsPlaybackFailed(it)
                         }
                     }
-
                 } catch (e: Exception) {
                     Timber.e(e)
                 }
             }
-
         })
-
         return mediaSource
     }
+
 
     override fun onTimelineChanged(timeline: Timeline, reason: Int) {
         Timber.d("onTimelineChanged")
@@ -215,27 +211,16 @@ class ExoplayerEngine(
         callback?.onNotificationChanged(notificationId, notification, ongoing)
     }
 
-
     override suspend fun isPlaying(): Boolean = player.isPlaying
+    override suspend fun next() = player.next()
+    override suspend fun hasNext(): Boolean = player.hasNext()
+    override suspend fun clear() = concatenatedSource.clear()
+    override suspend fun isEmpty(): Boolean = concatenatedSource.size == 0
+
     override suspend fun release() {
         playerNotificationManager.setPlayer(null)
         player.release()
     }
-
-    override suspend fun next() = player.next()
-
-    override suspend fun hasNext(): Boolean = player.hasNext()
-
-    override suspend fun clear() = concatenatedSource.clear()
-
-    override suspend fun isEmpty(): Boolean = concatenatedSource.size == 0
-
-    companion object {
-        private const val CHANNEL_ID = "1001"
-        private const val NOTIFICATION_CHANEL_NAME = "Notificaciones"
-        const val NOTIFICATION_ID = R.id.notificationId
-    }
-
 
     object ExoPlayerCache {
         private var cache: SimpleCache? = null
@@ -257,4 +242,11 @@ class ExoplayerEngine(
             return cache!!
         }
     }
+
+    companion object {
+        private const val CHANNEL_ID = "1001"
+        private const val NOTIFICATION_CHANEL_NAME = "Notificaciones"
+        const val NOTIFICATION_ID = R.id.notificationId
+    }
+
 }

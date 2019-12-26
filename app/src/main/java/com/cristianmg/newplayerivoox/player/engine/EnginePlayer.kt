@@ -12,4 +12,7 @@ interface EnginePlayer {
 
     @MainThread
     suspend fun release()
+
+    @MainThread
+    suspend fun getPlaybackPosition():Long
 }

@@ -11,9 +11,8 @@ import com.cristianmg.newplayerivoox.player.engine.EnginePlayerError
 import com.cristianmg.newplayerivoox.player.engine.exoplayer.ExoplayerEngine
 import com.cristianmg.newplayerivoox.player.queue.TracksQueue
 import com.cristianmg.newplayerivoox.player.queue.TracksQueueEngine
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
+import kotlinx.coroutines.*
+import kotlinx.coroutines.flow.flow
 import timber.log.Timber
 
 class PlayerService : Service(), EngineCallback {
@@ -22,6 +21,7 @@ class PlayerService : Service(), EngineCallback {
     private lateinit var queueEngine: TracksQueueEngine
     var callbackService: ServiceCallback? = null
     private val engineScope = CoroutineScope(Dispatchers.Main)
+    private val background = CoroutineScope(Dispatchers.IO + Job())
 
     val queue: TracksQueue by lazy {
         TracksQueue(queueEngine)
@@ -31,6 +31,10 @@ class PlayerService : Service(), EngineCallback {
         super.onCreate()
         loadEngines()
         engineScope.launch { enginePlayer.initPlayer() }
+/*
+        flow<Long>{
+           return@flow withContext(engineScope.coroutineContext) { enginePlayer.getPlaybackPosition() }
+        }*/
     }
 
     /**

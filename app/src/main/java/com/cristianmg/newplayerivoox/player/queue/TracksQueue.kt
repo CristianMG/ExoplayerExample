@@ -6,7 +6,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
 
-class TracksQueue(val queueEngine: TracksQueueEngine) {
+class TracksQueue(private val queueEngine: TracksQueueEngine) {
 
     private val mainScope = CoroutineScope(Dispatchers.Main)
 
