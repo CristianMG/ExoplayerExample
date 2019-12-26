@@ -30,13 +30,14 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import timber.log.Timber
 import java.io.File
+import kotlin.math.pow
 
 
 /**
  * Implementation of ExoPlayer engine @see https://exoplayer.dev/hello-world.html
  * @property context Context context service
  * @property player SimpleExoPlayer instance of exoplayer service
- * @property coroutineIoScope CoroutineScope scope to execute coroutines
+ * @property background CoroutineScope scope to execute coroutines
  * @constructor
  */
 class ExoplayerEngine(
@@ -66,22 +67,29 @@ class ExoplayerEngine(
             NOTIFICATION_ID,
             descriptionAdapter,
             this
-        )
+        ).apply {
+            setColorized(true)
+
+        }
     }
 
     private var concatenatedSource =
         ConcatenatingMediaSource()
 
-    private val coroutineIoScope = CoroutineScope(Dispatchers.IO + Job())
+    private val background = CoroutineScope(Dispatchers.IO + Job())
 
     override val currentTrack: Track?
         get() = player.currentTag as? Track
 
-    override fun initPlayer() {
+    override suspend fun initPlayer() {
         playerNotificationManager.setPlayer(player)
-        player.prepare(concatenatedSource)
         player.setHandleAudioBecomingNoisy(true)
         player.setHandleWakeLock(true)
+
+        if (ExoPlayerCache.simpleCache(context).cacheSpace < 6.0.pow(6.0)) {
+            Timber.d("The cache is too long starting to evict")
+            background.launch { ExoPlayerCache.simpleCache(context).release() }
+        }
     }
 
     private fun createNotificationChannel() {
@@ -116,6 +124,9 @@ class ExoplayerEngine(
     }
 
     private fun addItems(vararg tracks: Track) {
+        if (!player.isPlaying)
+            player.prepare(concatenatedSource)
+
         tracks.forEach {
             concatenatedSource.addMediaSource(getDataSourceFromTrack(it))
         }
@@ -143,7 +154,8 @@ class ExoplayerEngine(
             httpDataSourceFactory
         )
 
-        val cacheDataSourceFactory = CacheDataSourceFactory(ExoPlayerCache.simpleCache(context), dataSourceFactory)
+        val cacheDataSourceFactory =
+            CacheDataSourceFactory(ExoPlayerCache.simpleCache(context), dataSourceFactory)
 
 
         val mediaSource = ProgressiveMediaSource.Factory(cacheDataSourceFactory)
@@ -165,7 +177,7 @@ class ExoplayerEngine(
                  * Check preconditions to playback audio
                  */
                 try {
-                    coroutineIoScope.launch {
+                    background.launch {
                         val hasError = callback?.checkPreconditions(track)
                         hasError?.let {
                             callback?.preconditionsPlaybackFailed(it)
@@ -203,8 +215,9 @@ class ExoplayerEngine(
         callback?.onNotificationChanged(notificationId, notification, ongoing)
     }
 
+
     override suspend fun isPlaying(): Boolean = player.isPlaying
-    override fun release() {
+    override suspend fun release() {
         playerNotificationManager.setPlayer(null)
         player.release()
     }
@@ -214,6 +227,8 @@ class ExoplayerEngine(
     override suspend fun hasNext(): Boolean = player.hasNext()
 
     override suspend fun clear() = concatenatedSource.clear()
+
+    override suspend fun isEmpty(): Boolean = concatenatedSource.size == 0
 
     companion object {
         private const val CHANNEL_ID = "1001"

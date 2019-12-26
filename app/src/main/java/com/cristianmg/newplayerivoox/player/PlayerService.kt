@@ -15,15 +15,13 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import timber.log.Timber
-import java.lang.Exception
-import java.lang.IllegalStateException
 
 class PlayerService : Service(), EngineCallback {
 
     private lateinit var enginePlayer: EnginePlayer
     private lateinit var queueEngine: TracksQueueEngine
     var callbackService: ServiceCallback? = null
-    private val mainScope = CoroutineScope(Dispatchers.Main)
+    private val engineScope = CoroutineScope(Dispatchers.Main)
 
     val queue: TracksQueue by lazy {
         TracksQueue(queueEngine)
@@ -32,7 +30,7 @@ class PlayerService : Service(), EngineCallback {
     override fun onCreate() {
         super.onCreate()
         loadEngines()
-        enginePlayer.initPlayer()
+        engineScope.launch { enginePlayer.initPlayer() }
     }
 
     /**
@@ -58,19 +56,18 @@ class PlayerService : Service(), EngineCallback {
         notification: Notification,
         ongoing: Boolean
     ) {
-        Timber.d("onNotificationChanged notificationId$notificationId , ongoing $ongoing")
-        mainScope.launch {
+        engineScope.launch {
+            val isQueueEmpty = queueEngine.isEmpty()
+            Timber.d("onNotificationChanged notificationId$notificationId , ongoing $ongoing, isQueueEmpty: $isQueueEmpty")
             if (ongoing) {
                 startForeground(notificationId, notification)
             } else {
-                stopForeground(!queueEngine.hasNext())
+                stopForeground(isQueueEmpty)
             }
         }
     }
 
     override suspend fun checkPreconditions(currentTrack: Track?): EnginePlayerError? {
-/*        if (currentTrack?.getName() == "3")
-            return IllegalStateException("3 is not permitted as a title")*/
         return null
     }
 
@@ -80,24 +77,15 @@ class PlayerService : Service(), EngineCallback {
      */
     override fun preconditionsPlaybackFailed(error: EnginePlayerError) {
         callbackService?.preconditionsPlaybackFailed(error)
-        mainScope.launch {
-
-            /**
-             * We can skip or do another things with the player when the preconditions are failed
-             * **/
-          /*  if (error is IllegalStateException) {
-                if (queueEngine.hasNext()) {
-                    queueEngine.next()
-                } else {
-                    queueEngine.clear()
-                }
-            }*/
+        engineScope.launch {
         }
     }
 
-
-    interface ServiceCallback {
-        fun preconditionsPlaybackFailed(illegalStateException: EnginePlayerError)
+    override fun onDestroy() {
+        super.onDestroy()
+        engineScope.launch {
+            enginePlayer.release()
+        }
     }
 
     /**
@@ -112,5 +100,9 @@ class PlayerService : Service(), EngineCallback {
 
     override fun onBind(intent: Intent): IBinder =
         binder
+
+    interface ServiceCallback {
+        fun preconditionsPlaybackFailed(illegalStateException: EnginePlayerError)
+    }
 
 }

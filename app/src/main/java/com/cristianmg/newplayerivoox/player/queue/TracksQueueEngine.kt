@@ -43,4 +43,7 @@ interface TracksQueueEngine {
 
     @MainThread
     suspend fun clear()
+
+    @MainThread
+    suspend fun isEmpty(): Boolean
 }
