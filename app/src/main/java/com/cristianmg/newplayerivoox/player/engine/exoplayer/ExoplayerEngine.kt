@@ -46,6 +46,7 @@ class ExoplayerEngine(
 
     private val player: SimpleExoPlayer by lazy {
         SimpleExoPlayer.Builder(context)
+            .setUseLazyPreparation(true)
             .build()
             .apply {
                 addListener(this@ExoplayerEngine)
