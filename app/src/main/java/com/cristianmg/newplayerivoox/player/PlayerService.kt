@@ -1,6 +1,5 @@
 package com.cristianmg.newplayerivoox.player
 
-
 import android.app.Notification
 import android.app.Service
 import android.content.Intent
@@ -11,16 +10,19 @@ import com.cristianmg.newplayerivoox.player.engine.EnginePlayer
 import com.cristianmg.newplayerivoox.player.engine.exoplayer.ExoplayerEngine
 import com.cristianmg.newplayerivoox.player.queue.TracksQueue
 import com.cristianmg.newplayerivoox.player.queue.TracksQueueEngine
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import timber.log.Timber
 import java.lang.Exception
 import java.lang.IllegalStateException
-
 
 class PlayerService : Service(), EngineCallback {
 
     private lateinit var enginePlayer: EnginePlayer
     private lateinit var queueEngine: TracksQueueEngine
     var callbackService: ServiceCallback? = null
+    private val mainScope = CoroutineScope(Dispatchers.Main)
 
     val queue: TracksQueue by lazy {
         TracksQueue(queueEngine)
@@ -32,28 +34,12 @@ class PlayerService : Service(), EngineCallback {
         enginePlayer.initPlayer()
     }
 
-
-    /**
-     * The current track finish to play
-     * @param track Track
-     */
-    override fun onFinishPlay(track: Track) {
-
-    }
-
-    /**
-     * The track is starting to play
-     * @param track Track
-     */
-    override fun onPlayTrack(track: Track) {
-
-    }
-
     /**
      * The engine inform that the loading was changed
      * @param boolean Boolean
      */
     override fun onLoadingChange(boolean: Boolean) {
+        Timber.d("onLoadingChange isLoading: $boolean")
 
     }
 
@@ -72,10 +58,12 @@ class PlayerService : Service(), EngineCallback {
         ongoing: Boolean
     ) {
         Timber.d("onNotificationChanged notificationId$notificationId , ongoing $ongoing")
-        if (ongoing) {
-            startForeground(notificationId, notification)
-        } else {
-            stopForeground(true)
+        mainScope.launch {
+            if (ongoing) {
+                startForeground(notificationId, notification)
+            } else {
+                stopForeground(!queueEngine.hasNext())
+            }
         }
     }
 
@@ -91,11 +79,13 @@ class PlayerService : Service(), EngineCallback {
      */
     override fun preconditionsPlaybackFailed(error: Exception) {
         callbackService?.preconditionsPlaybackFailed(error)
-        if (error is IllegalStateException) {
-            if (queueEngine.hasNext()) {
-                queueEngine.next()
-            } else {
-                queueEngine.clear()
+        mainScope.launch {
+            if (error is IllegalStateException) {
+                if (queueEngine.hasNext()) {
+                    queueEngine.next()
+                } else {
+                    queueEngine.clear()
+                }
             }
         }
     }

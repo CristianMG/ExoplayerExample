@@ -11,16 +11,25 @@ import com.cristianmg.newplayerivoox.player.Track
 import com.cristianmg.newplayerivoox.player.engine.EngineCallback
 import com.cristianmg.newplayerivoox.player.engine.EnginePlayer
 import com.cristianmg.newplayerivoox.player.queue.TracksQueueEngine
-import com.google.android.exoplayer2.*
+import com.google.android.exoplayer2.ExoPlaybackException
+import com.google.android.exoplayer2.Player
+import com.google.android.exoplayer2.SimpleExoPlayer
+import com.google.android.exoplayer2.Timeline
 import com.google.android.exoplayer2.source.ConcatenatingMediaSource
 import com.google.android.exoplayer2.source.MediaSource
 import com.google.android.exoplayer2.source.MediaSourceEventListener
 import com.google.android.exoplayer2.source.ProgressiveMediaSource
 import com.google.android.exoplayer2.ui.PlayerNotificationManager
 import com.google.android.exoplayer2.upstream.DefaultDataSourceFactory
+import com.google.android.exoplayer2.upstream.DefaultHttpDataSource
+import com.google.android.exoplayer2.upstream.DefaultHttpDataSourceFactory
 import com.google.android.exoplayer2.util.Util
-import kotlinx.coroutines.*
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.launch
 import timber.log.Timber
+
 
 /**
  * Implementation of exoplayer engine @see https://exoplayer.dev/hello-world.html
@@ -70,7 +79,6 @@ class ExoplayerEngine(
         player.prepare(concatenatedSource)
         player.setHandleAudioBecomingNoisy(true)
         player.setHandleWakeLock(true)
-
     }
 
     private fun createNotificationChannel() {
@@ -86,13 +94,13 @@ class ExoplayerEngine(
         }
     }
 
-    override fun addToQueue(
+    override suspend fun addToQueue(
         track: Track,
         playWhenReady: Boolean,
         clearOldPlayList: Boolean
     ) = addToQueue(listOf(track), playWhenReady, clearOldPlayList)
 
-    override fun addToQueue(
+    override suspend fun addToQueue(
         tracks: List<Track>,
         playWhenReady: Boolean,
         clearOldPlayList: Boolean
@@ -118,9 +126,17 @@ class ExoplayerEngine(
      */
     private fun getDataSourceFromTrack(track: Track): ProgressiveMediaSource {
         // Produces DataSource instances through which media data is loaded.
+        val httpDataSourceFactory = DefaultHttpDataSourceFactory(
+            Util.getUserAgent(context, context.applicationInfo.name),
+            null /* listener */,
+            DefaultHttpDataSource.DEFAULT_CONNECT_TIMEOUT_MILLIS,
+            DefaultHttpDataSource.DEFAULT_READ_TIMEOUT_MILLIS,
+            true /* allowCrossProtocolRedirects */
+        )
         val dataSourceFactory = DefaultDataSourceFactory(
             context,
-            Util.getUserAgent(context, "ivoox")
+            null,
+            httpDataSourceFactory
         )
 
         val mediaSource = ProgressiveMediaSource.Factory(dataSourceFactory)
@@ -157,15 +173,9 @@ class ExoplayerEngine(
         return mediaSource
     }
 
-
     override fun onTimelineChanged(timeline: Timeline, reason: Int) {
         Timber.d("onTimelineChanged")
     }
-
-    override fun onPositionDiscontinuity(reason: Int) {
-
-    }
-
 
     override fun onLoadingChanged(isLoading: Boolean) {
         Timber.d("onLoadingChanged:$isLoading")
@@ -176,25 +186,6 @@ class ExoplayerEngine(
         Timber.e(error, "onPlayerError")
     }
 
-    override fun onPlayerStateChanged(playWhenReady: Boolean, playbackState: Int) {
-        when (playbackState) {
-            Player.STATE_IDLE -> Timber.d(Player.STATE_IDLE.toString())
-            Player.STATE_BUFFERING -> Timber.d(Player.STATE_BUFFERING.toString())
-            Player.STATE_READY -> {
-                Timber.d(Player.STATE_READY.toString())
-                currentTrack?.let {
-                    callback?.onPlayTrack(it)
-                }
-            }
-            Player.STATE_ENDED -> {
-                Timber.d(Player.STATE_ENDED.toString())
-                currentTrack?.let {
-                    callback?.onFinishPlay(it)
-                }
-            }
-        }
-    }
-
     override fun onNotificationPosted(
         notificationId: Int,
         notification: Notification,
@@ -203,17 +194,17 @@ class ExoplayerEngine(
         callback?.onNotificationChanged(notificationId, notification, ongoing)
     }
 
-    override fun isPlaying(): Boolean = player.isPlaying
+    override suspend fun isPlaying(): Boolean = player.isPlaying
     override fun release() {
         playerNotificationManager.setPlayer(null)
         player.release()
     }
 
-    override fun next() = player.next()
+    override suspend fun next() = player.next()
 
-    override fun hasNext(): Boolean = player.hasNext()
+    override suspend fun hasNext(): Boolean = player.hasNext()
 
-    override fun clear() = concatenatedSource.clear()
+    override suspend fun clear() = concatenatedSource.clear()
 
 
     companion object {

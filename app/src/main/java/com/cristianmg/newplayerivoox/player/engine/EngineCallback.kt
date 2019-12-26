@@ -10,8 +10,6 @@ import java.lang.Exception
  */
 interface EngineCallback {
     fun onLoadingChange(boolean: Boolean)
-    fun onPlayTrack(track: Track)
-    fun onFinishPlay(track: Track)
     fun onNotificationChanged(
         notificationId: Int,
         notification: Notification,

@@ -30,7 +30,7 @@ class MainActivity : BaseBindingActivity() {
                     ),
                     getTrack(
                         "2",
-                        "https://file-examples.com/wp-content/uploads/2017/11/file_example_MP3_5MG.mp3"
+                        "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3"
                     ),
                     getTrack(
                         "3",

@@ -6,6 +6,7 @@ import android.os.IBinder
 import android.util.Log
 import androidx.appcompat.app.AppCompatActivity
 import com.cristianmg.newplayerivoox.player.PlayerService
+import timber.log.Timber
 
 abstract class BaseBindingActivity : AppCompatActivity() {
 
@@ -39,13 +40,13 @@ abstract class BaseBindingActivity : AppCompatActivity() {
             mBound = true
 
             onServiceBinder()
-            Log.d("MainActivity", "ServiceConnected")
+            Timber.d( "ServiceConnected")
         }
 
 
         override fun onServiceDisconnected(arg0: ComponentName) {
             mBound = false
-            Log.d("MainActivity", "ServiceDisconnected")
+            Timber.d("ServiceDisconnected")
         }
     }
 
