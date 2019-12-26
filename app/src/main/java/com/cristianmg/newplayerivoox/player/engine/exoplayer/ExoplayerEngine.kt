@@ -15,24 +15,25 @@ import com.google.android.exoplayer2.ExoPlaybackException
 import com.google.android.exoplayer2.Player
 import com.google.android.exoplayer2.SimpleExoPlayer
 import com.google.android.exoplayer2.Timeline
+import com.google.android.exoplayer2.database.ExoDatabaseProvider
 import com.google.android.exoplayer2.source.ConcatenatingMediaSource
 import com.google.android.exoplayer2.source.MediaSource
 import com.google.android.exoplayer2.source.MediaSourceEventListener
 import com.google.android.exoplayer2.source.ProgressiveMediaSource
 import com.google.android.exoplayer2.ui.PlayerNotificationManager
-import com.google.android.exoplayer2.upstream.DefaultDataSourceFactory
-import com.google.android.exoplayer2.upstream.DefaultHttpDataSource
-import com.google.android.exoplayer2.upstream.DefaultHttpDataSourceFactory
+import com.google.android.exoplayer2.upstream.*
+import com.google.android.exoplayer2.upstream.cache.*
 import com.google.android.exoplayer2.util.Util
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import timber.log.Timber
+import java.io.File
 
 
 /**
- * Implementation of exoplayer engine @see https://exoplayer.dev/hello-world.html
+ * Implementation of ExoPlayer engine @see https://exoplayer.dev/hello-world.html
  * @property context Context context service
  * @property player SimpleExoPlayer instance of exoplayer service
  * @property coroutineIoScope CoroutineScope scope to execute coroutines
@@ -43,6 +44,7 @@ class ExoplayerEngine(
     override var callback: EngineCallback?
 ) : EnginePlayer, Player.EventListener, PlayerNotificationManager.NotificationListener,
     TracksQueueEngine {
+
 
     private val player: SimpleExoPlayer by lazy {
         SimpleExoPlayer.Builder(context)
@@ -113,7 +115,6 @@ class ExoplayerEngine(
         addItems(*tracks.toTypedArray())
     }
 
-
     private fun addItems(vararg tracks: Track) {
         tracks.forEach {
             concatenatedSource.addMediaSource(getDataSourceFromTrack(it))
@@ -126,7 +127,8 @@ class ExoplayerEngine(
      * @return MediaSource
      */
     private fun getDataSourceFromTrack(track: Track): ProgressiveMediaSource {
-        // Produces DataSource instances through which media data is loaded.
+        // Produces DataSource instances through which media data is loaded
+
         val httpDataSourceFactory = DefaultHttpDataSourceFactory(
             Util.getUserAgent(context, context.applicationInfo.name),
             null /* listener */,
@@ -134,15 +136,20 @@ class ExoplayerEngine(
             DefaultHttpDataSource.DEFAULT_READ_TIMEOUT_MILLIS,
             true /* allowCrossProtocolRedirects */
         )
+
         val dataSourceFactory = DefaultDataSourceFactory(
             context,
             null,
             httpDataSourceFactory
         )
 
-        val mediaSource = ProgressiveMediaSource.Factory(dataSourceFactory)
+        val cacheDataSourceFactory = CacheDataSourceFactory(ExoPlayerCache.simpleCache(context), dataSourceFactory)
+
+
+        val mediaSource = ProgressiveMediaSource.Factory(cacheDataSourceFactory)
             .setTag(track)
             .createMediaSource(track.getUri())
+
 
         /***
          * Check conditions to allow user listen audios
@@ -169,6 +176,7 @@ class ExoplayerEngine(
                     Timber.e(e)
                 }
             }
+
         })
 
         return mediaSource
@@ -207,7 +215,6 @@ class ExoplayerEngine(
 
     override suspend fun clear() = concatenatedSource.clear()
 
-
     companion object {
         private const val CHANNEL_ID = "1001"
         private const val NOTIFICATION_CHANEL_NAME = "Notificaciones"
@@ -215,4 +222,24 @@ class ExoplayerEngine(
     }
 
 
+    object ExoPlayerCache {
+        private var cache: SimpleCache? = null
+        fun simpleCache(context: Context): SimpleCache {
+            if (cache == null) {
+
+                val directory = File(context.cacheDir, "media")
+                if (!directory.exists())
+                    directory.mkdir()
+
+                cache = SimpleCache(
+                    directory,
+                    NoOpCacheEvictor(),
+                    ExoDatabaseProvider(context)
+                )
+
+                Timber.d("Initializing cache exoplayer")
+            }
+            return cache!!
+        }
+    }
 }
