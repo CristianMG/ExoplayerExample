@@ -7,6 +7,7 @@ import androidx.core.content.ContextCompat
 import androidx.core.graphics.drawable.toBitmap
 import com.cristianmg.newplayerivoox.player.PlayerService
 import com.cristianmg.newplayerivoox.player.Track
+import com.cristianmg.newplayerivoox.player.engine.EnginePlayerError
 import com.google.android.material.snackbar.Snackbar
 import kotlinx.android.synthetic.main.activity_main.*
 import timber.log.Timber
@@ -38,15 +39,14 @@ class MainActivity : BaseBindingActivity() {
                     )
                     //getTrack("4","https://file-examples.com/wp-content/uploads/2017/11/file_example_MP3_5MG.mp3"),
                     //getTrack("5","https://file-examples.com/wp-content/uploads/2017/11/file_example_MP3_5MG.mp3")
-                )
-            )
-
+             ))
         }
     }
 
     override fun onServiceBinder() {
         mService?.callbackService = object : PlayerService.ServiceCallback {
-            override fun preconditionsPlaybackFailed(illegalStateException: Exception) {
+
+            override fun preconditionsPlaybackFailed(illegalStateException: EnginePlayerError) {
                 Snackbar.make(
                     rlContent,
                     "Error recibido $illegalStateException",

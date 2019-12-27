@@ -47,6 +47,11 @@ class ExoplayerEngine(
     TracksQueueEngine {
 
 
+    override suspend fun getPlaybackPosition(): Long {
+        return 0L
+    }
+
+
     private val player: SimpleExoPlayer by lazy {
         SimpleExoPlayer.Builder(context)
             .setUseLazyPreparation(true)
@@ -86,7 +91,7 @@ class ExoplayerEngine(
         player.setHandleAudioBecomingNoisy(true)
         player.setHandleWakeLock(true)
 
-        if (ExoPlayerCache.simpleCache(context).cacheSpace < 6.0.pow(6.0)) {
+        if (ExoPlayerCache.simpleCache(context).cacheSpace > 6.0.pow(6.0)) {
             Timber.d("The cache is too long starting to evict")
             background.launch { ExoPlayerCache.simpleCache(context).release() }
         }
