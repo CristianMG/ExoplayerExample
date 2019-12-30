@@ -4,23 +4,25 @@ import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.content.Context
-import android.net.Uri
 import android.os.Build
 import android.os.Handler
 import com.cristianmg.newplayerivoox.R
 import com.cristianmg.newplayerivoox.player.Track
+import com.cristianmg.newplayerivoox.player.ads.FixedAdsLoader
 import com.cristianmg.newplayerivoox.player.engine.EngineCallback
 import com.cristianmg.newplayerivoox.player.engine.EnginePlayer
 import com.cristianmg.newplayerivoox.player.queue.TracksQueueEngine
-import com.google.android.exoplayer2.*
+import com.google.android.exoplayer2.ExoPlaybackException
+import com.google.android.exoplayer2.Player
+import com.google.android.exoplayer2.SimpleExoPlayer
+import com.google.android.exoplayer2.Timeline
 import com.google.android.exoplayer2.database.ExoDatabaseProvider
-import com.google.android.exoplayer2.ext.ima.ImaAdsLoader
 import com.google.android.exoplayer2.ext.okhttp.OkHttpDataSourceFactory
-import com.google.android.exoplayer2.source.ConcatenatingMediaSource
 import com.google.android.exoplayer2.source.MediaSource
 import com.google.android.exoplayer2.source.MediaSourceEventListener
 import com.google.android.exoplayer2.source.ProgressiveMediaSource
 import com.google.android.exoplayer2.source.ads.AdsLoader
+import com.google.android.exoplayer2.source.ads.AdsMediaSource
 import com.google.android.exoplayer2.trackselection.DefaultTrackSelector
 import com.google.android.exoplayer2.ui.PlayerNotificationManager
 import com.google.android.exoplayer2.ui.PlayerView
@@ -29,13 +31,13 @@ import com.google.android.exoplayer2.upstream.cache.NoOpCacheEvictor
 import com.google.android.exoplayer2.upstream.cache.SimpleCache
 import com.google.android.exoplayer2.util.EventLogger
 import com.google.android.exoplayer2.util.Util
-import kotlinx.coroutines.*
-import okhttp3.HttpUrl
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.launch
 import okhttp3.OkHttpClient
-import okhttp3.Request
 import timber.log.Timber
 import java.io.File
-import java.lang.IllegalStateException
 import java.util.concurrent.TimeUnit
 import kotlin.math.pow
 
@@ -71,10 +73,14 @@ class ExoplayerEngine(
     }
 
     private val player: SimpleExoPlayer by lazy {
+        val trackSelector = DefaultTrackSelector(context)
         SimpleExoPlayer.Builder(context)
+            .setTrackSelector(trackSelector)
             .build()
             .apply {
                 addListener(this@ExoplayerEngine)
+                addAnalyticsListener(EventLogger(trackSelector))
+
             }
     }
 
@@ -130,13 +136,9 @@ class ExoplayerEngine(
     }
 
 
-    override suspend fun play() {
-        playlist.getOrNull(0)?.let {
-            val track = it.getTagAsTrack()
-            if (track?.prerollPlayed() == true) {
-
-            }
-        }
+    override suspend fun play(track: Track) {
+        player.prepare(getDataSourceFromTrack(track))
+        player.playWhenReady = true
     }
 
 
@@ -166,7 +168,7 @@ class ExoplayerEngine(
      * @param track Track
      * @return MediaSource
      */
-    private fun getDataSourceFromTrack(track: Track): MediaSource {
+    private fun getDataSourceFromTrack(track: Track): AdsMediaSource {
         // Produces DataSource instances through which media data is loaded
         val mediaSource =
             ProgressiveMediaSource.Factory(/*CacheDataSourceFactory(ExoPlayerCache.simpleCache(context), */
@@ -202,7 +204,15 @@ class ExoplayerEngine(
         })
 
 
-        return mediaSource
+        return AdsMediaSource(mediaSource, dataSourceFactory, getAdsLoader(track), null)
+    }
+
+    private fun getAdsLoader(relatedTrack: Track): AdsLoader {
+        return FixedAdsLoader(relatedTrack)
+            .apply {
+                adsLoaders.add(this)
+                setPlayer(player)
+            }
     }
 
     private fun createNotificationChannel() {

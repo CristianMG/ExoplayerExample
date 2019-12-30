@@ -42,7 +42,7 @@ class FixedAdsLoader(
         adPlaybackState = adPlaybackState?.withAdUri(
             0,
             0,
-            Uri.parse("https://file-examples.com/wp-content/uploads/2017/04/file_example_MP4_480_1_5MG.mp4")
+            Uri.parse("https://file-examples.com/wp-content/uploads/2017/11/file_example_MP3_5MG.mp3")
         )
         updateAdPlaybackState()
     }
@@ -53,7 +53,7 @@ class FixedAdsLoader(
     }
 
     override fun onIsPlayingChanged(isPlaying: Boolean) {
-        Timber.d("${player?.isPlayingAd} /// ${player?.currentAdGroupIndex} /// ${player?.currentAdIndexInAdGroup}")
+        Timber.d("isPlaying -> ${player?.isPlaying} isPlayingAd -> ${player?.isPlayingAd} /// ${player?.currentAdGroupIndex} /// ${player?.currentAdIndexInAdGroup}")
     }
 
     override fun setPlayer(player: Player?) {

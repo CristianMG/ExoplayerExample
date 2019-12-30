@@ -6,7 +6,7 @@ import com.cristianmg.newplayerivoox.player.Track
 interface TracksQueueEngine {
 
 
-    suspend fun play()
+    suspend fun play(track: Track)
 
     /***
      * Add to queue one element

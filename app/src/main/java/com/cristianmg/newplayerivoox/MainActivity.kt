@@ -22,25 +22,30 @@ class MainActivity : BaseBindingActivity() {
         Timber.plant(Timber.DebugTree())
 
         btRandom.setOnClickListener {
-
-            mService?.queue?.addToQueue(
-                listOf(
-                    getTrack(
-                        "1",
-                        "https://file-examples.com/wp-content/uploads/2017/11/file_example_MP3_5MG.mp3"
-                    ),
-                    getTrack(
-                        "2",
-                        "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3"
-                    ),
-                    getTrack(
-                        "3",
-                        "https://file-examples.com/wp-content/uploads/2017/11/file_example_MP3_5MG.mp3"
-                    )
-                    //getTrack("4","https://file-examples.com/wp-content/uploads/2017/11/file_example_MP3_5MG.mp3"),
-                    //getTrack("5","https://file-examples.com/wp-content/uploads/2017/11/file_example_MP3_5MG.mp3")
+            mService?.queue?.play(
+                getTrack(
+                    "1",
+                    "https://file-examples.com/wp-content/uploads/2017/11/file_example_MP3_5MG.mp3"
                 )
             )
+            /*      mService?.queue?.addToQueue(
+                      listOf(
+                          getTrack(
+                              "1",
+                              "https://file-examples.com/wp-content/uploads/2017/11/file_example_MP3_5MG.mp3"
+                          ),
+                          getTrack(
+                              "2",
+                              "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3"
+                          ),
+                          getTrack(
+                              "3",
+                              "https://file-examples.com/wp-content/uploads/2017/11/file_example_MP3_5MG.mp3"
+                          )
+                          //getTrack("4","https://file-examples.com/wp-content/uploads/2017/11/file_example_MP3_5MG.mp3"),
+                          //getTrack("5","https://file-examples.com/wp-content/uploads/2017/11/file_example_MP3_5MG.mp3")
+                    */  //)
+            // )
         }
     }
 
@@ -61,6 +66,9 @@ class MainActivity : BaseBindingActivity() {
     fun getTrack(name: String, url: String): Track {
 
         return object : Track {
+            override fun prerollPlayed(): Boolean = true
+
+            override fun postrollPlayerd(): Boolean = true
             override fun getIdentifier(): String = UUID.randomUUID().toString()
             override fun getDuration(): Long = TimeUnit.MINUTES.toMillis(3)
             override fun getAdvertiseInterval(): Long = TimeUnit.SECONDS.toMillis(30)
