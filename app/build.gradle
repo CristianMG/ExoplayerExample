@@ -24,6 +24,7 @@ android {
 
     compileOptions {
         targetCompatibility JavaVersion.VERSION_1_8
+        sourceCompatibility = 1.8
     }
 
 }
@@ -43,6 +44,7 @@ dependencies {
 
     implementation 'com.jakewharton.timber:timber:4.7.1'
     implementation 'com.google.android.exoplayer:extension-ima:2.11.1'
+    implementation 'com.google.android.exoplayer:extension-okhttp:2.11.1'
 
     testImplementation 'junit:junit:4.12'
     androidTestImplementation 'androidx.test:runner:1.2.0'

@@ -4,6 +4,7 @@ import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.content.Context
+import android.net.Uri
 import android.os.Build
 import android.os.Handler
 import com.cristianmg.newplayerivoox.R
@@ -11,25 +12,31 @@ import com.cristianmg.newplayerivoox.player.Track
 import com.cristianmg.newplayerivoox.player.engine.EngineCallback
 import com.cristianmg.newplayerivoox.player.engine.EnginePlayer
 import com.cristianmg.newplayerivoox.player.queue.TracksQueueEngine
-import com.google.android.exoplayer2.ExoPlaybackException
-import com.google.android.exoplayer2.Player
-import com.google.android.exoplayer2.SimpleExoPlayer
-import com.google.android.exoplayer2.Timeline
+import com.google.android.exoplayer2.*
 import com.google.android.exoplayer2.database.ExoDatabaseProvider
+import com.google.android.exoplayer2.ext.ima.ImaAdsLoader
+import com.google.android.exoplayer2.ext.okhttp.OkHttpDataSourceFactory
 import com.google.android.exoplayer2.source.ConcatenatingMediaSource
 import com.google.android.exoplayer2.source.MediaSource
 import com.google.android.exoplayer2.source.MediaSourceEventListener
 import com.google.android.exoplayer2.source.ProgressiveMediaSource
+import com.google.android.exoplayer2.source.ads.AdsLoader
+import com.google.android.exoplayer2.trackselection.DefaultTrackSelector
 import com.google.android.exoplayer2.ui.PlayerNotificationManager
-import com.google.android.exoplayer2.upstream.*
-import com.google.android.exoplayer2.upstream.cache.*
+import com.google.android.exoplayer2.ui.PlayerView
+import com.google.android.exoplayer2.upstream.DefaultHttpDataSource
+import com.google.android.exoplayer2.upstream.cache.NoOpCacheEvictor
+import com.google.android.exoplayer2.upstream.cache.SimpleCache
+import com.google.android.exoplayer2.util.EventLogger
 import com.google.android.exoplayer2.util.Util
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.launch
+import kotlinx.coroutines.*
+import okhttp3.HttpUrl
+import okhttp3.OkHttpClient
+import okhttp3.Request
 import timber.log.Timber
 import java.io.File
+import java.lang.IllegalStateException
+import java.util.concurrent.TimeUnit
 import kotlin.math.pow
 
 
@@ -45,21 +52,6 @@ class ExoplayerEngine(
     override var callback: EngineCallback?
 ) : EnginePlayer, Player.EventListener, PlayerNotificationManager.NotificationListener,
     TracksQueueEngine {
-
-
-    override suspend fun getPlaybackPosition(): Long {
-        return 0L
-    }
-
-
-    private val player: SimpleExoPlayer by lazy {
-        SimpleExoPlayer.Builder(context)
-            .setUseLazyPreparation(true)
-            .build()
-            .apply {
-                addListener(this@ExoplayerEngine)
-            }
-    }
 
     private val descriptionAdapter = DescriptionAdapter(context)
 
@@ -78,10 +70,40 @@ class ExoplayerEngine(
         }
     }
 
-    private var concatenatedSource =
-        ConcatenatingMediaSource()
+    private val player: SimpleExoPlayer by lazy {
+        SimpleExoPlayer.Builder(context)
+            .build()
+            .apply {
+                addListener(this@ExoplayerEngine)
+            }
+    }
+
+    private var playlist =
+        mutableListOf<MediaSource>()
 
     private val background = CoroutineScope(Dispatchers.IO + Job())
+    private val adsLoaders = mutableListOf<AdsLoader>()
+    private var view: PlayerView? = null
+
+    private val dataSourceFactory: OkHttpDataSourceFactory by lazy {
+        val okHttpClient: OkHttpClient = OkHttpClient.Builder()
+            .readTimeout(
+                DefaultHttpDataSource.DEFAULT_READ_TIMEOUT_MILLIS.toLong(),
+                TimeUnit.MILLISECONDS
+            )
+            .connectTimeout(
+                DefaultHttpDataSource.DEFAULT_CONNECT_TIMEOUT_MILLIS.toLong(),
+                TimeUnit.MILLISECONDS
+            )
+            .followRedirects(true)
+            .followSslRedirects(true)
+            .build()
+
+        OkHttpDataSourceFactory(
+            okHttpClient,
+            Util.getUserAgent(context, context.applicationInfo.name)
+        )
+    }
 
     override val currentTrack: Track?
         get() = player.currentTag as? Track
@@ -97,43 +119,45 @@ class ExoplayerEngine(
         }
     }
 
-    private fun createNotificationChannel() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val importance = NotificationManager.IMPORTANCE_LOW
-            val notificationChannel =
-                NotificationChannel(CHANNEL_ID, NOTIFICATION_CHANEL_NAME, importance)
-            notificationChannel.enableVibration(true)
-            notificationChannel.vibrationPattern = longArrayOf(0L)
-            val notificationManager =
-                context.getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager
-            notificationManager?.createNotificationChannel(notificationChannel)
+    override fun setView(pvExoplayer: PlayerView) {
+        this.view = pvExoplayer
+        pvExoplayer.player = player
+    }
+
+
+    override suspend fun getPlaybackPosition(): Long {
+        return 0L
+    }
+
+
+    override suspend fun play() {
+        playlist.getOrNull(0)?.let {
+            val track = it.getTagAsTrack()
+            if (track?.prerollPlayed() == true) {
+
+            }
         }
     }
 
+
     override suspend fun addToQueue(
         track: Track,
-        playWhenReady: Boolean,
         clearOldPlayList: Boolean
-    ) = addToQueue(listOf(track), playWhenReady, clearOldPlayList)
+    ) = addToQueue(listOf(track), clearOldPlayList)
 
     override suspend fun addToQueue(
         tracks: List<Track>,
-        playWhenReady: Boolean,
         clearOldPlayList: Boolean
     ) {
         if (clearOldPlayList) {
-            concatenatedSource.clear()
+            playlist.clear()
         }
-        player.playWhenReady = playWhenReady
         addItems(*tracks.toTypedArray())
     }
 
     private fun addItems(vararg tracks: Track) {
-        if (!player.isPlaying)
-            player.prepare(concatenatedSource)
-
         tracks.forEach {
-            concatenatedSource.addMediaSource(getDataSourceFromTrack(it))
+            playlist.add(getDataSourceFromTrack(it))
         }
     }
 
@@ -142,29 +166,14 @@ class ExoplayerEngine(
      * @param track Track
      * @return MediaSource
      */
-    private fun getDataSourceFromTrack(track: Track): ProgressiveMediaSource {
+    private fun getDataSourceFromTrack(track: Track): MediaSource {
         // Produces DataSource instances through which media data is loaded
-
-        val httpDataSourceFactory = DefaultHttpDataSourceFactory(
-            Util.getUserAgent(context, context.applicationInfo.name),
-            null /* listener */,
-            DefaultHttpDataSource.DEFAULT_CONNECT_TIMEOUT_MILLIS,
-            DefaultHttpDataSource.DEFAULT_READ_TIMEOUT_MILLIS,
-            true /* allowCrossProtocolRedirects */
-        )
-
-        val dataSourceFactory = DefaultDataSourceFactory(
-            context,
-            null,
-            httpDataSourceFactory
-        )
-
-        val cacheDataSourceFactory =
-            CacheDataSourceFactory(ExoPlayerCache.simpleCache(context), dataSourceFactory)
-
-        val mediaSource = ProgressiveMediaSource.Factory(cacheDataSourceFactory)
-            .setTag(track)
-            .createMediaSource(track.getUri())
+        val mediaSource =
+            ProgressiveMediaSource.Factory(/*CacheDataSourceFactory(ExoPlayerCache.simpleCache(context), */
+                dataSourceFactory/*)*/
+            )
+                .setTag(track)
+                .createMediaSource(track.getUri())
 
         /***
          * Check conditions to allow user listen audios
@@ -191,7 +200,22 @@ class ExoplayerEngine(
                 }
             }
         })
+
+
         return mediaSource
+    }
+
+    private fun createNotificationChannel() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val importance = NotificationManager.IMPORTANCE_LOW
+            val notificationChannel =
+                NotificationChannel(CHANNEL_ID, NOTIFICATION_CHANEL_NAME, importance)
+            notificationChannel.enableVibration(true)
+            notificationChannel.vibrationPattern = longArrayOf(0L)
+            val notificationManager =
+                context.getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager
+            notificationManager?.createNotificationChannel(notificationChannel)
+        }
     }
 
 
@@ -219,12 +243,16 @@ class ExoplayerEngine(
     override suspend fun isPlaying(): Boolean = player.isPlaying
     override suspend fun next() = player.next()
     override suspend fun hasNext(): Boolean = player.hasNext()
-    override suspend fun clear() = concatenatedSource.clear()
-    override suspend fun isEmpty(): Boolean = concatenatedSource.size == 0
+    override suspend fun clear() = playlist.clear()
+    override suspend fun isEmpty(): Boolean = playlist.isEmpty()
 
     override suspend fun release() {
         playerNotificationManager.setPlayer(null)
         player.release()
+        adsLoaders.forEach {
+            it.release()
+        }
+        adsLoaders.clear()
     }
 
     object ExoPlayerCache {

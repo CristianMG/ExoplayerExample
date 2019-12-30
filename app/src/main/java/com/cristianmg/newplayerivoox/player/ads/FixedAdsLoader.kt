@@ -1,0 +1,156 @@
+package com.cristianmg.newplayerivoox.player.ads
+
+import android.net.Uri
+import android.os.Handler
+import android.os.Looper
+import com.cristianmg.newplayerivoox.player.Track
+import com.google.android.exoplayer2.C
+import com.google.android.exoplayer2.C.TIME_END_OF_SOURCE
+import com.google.android.exoplayer2.Player
+import com.google.android.exoplayer2.source.ads.AdPlaybackState
+import com.google.android.exoplayer2.source.ads.AdsLoader
+import com.google.android.exoplayer2.source.ads.AdsMediaSource
+import com.google.android.exoplayer2.upstream.DataSpec
+import com.google.android.exoplayer2.util.Assertions
+import com.google.android.exoplayer2.util.MimeTypes
+import timber.log.Timber
+import java.io.IOException
+
+
+class FixedAdsLoader(
+    private val relatedTrack: Track
+) : AdsLoader, Player.EventListener {
+
+    private var player: Player? = null
+    private var supportedMimeTypes: List<String> = mutableListOf()
+    private var eventListener: AdsLoader.EventListener? = null
+    private var adPlaybackState: AdPlaybackState? = null
+
+    override fun start(
+        eventListener: AdsLoader.EventListener,
+        adViewProvider: AdsLoader.AdViewProvider?
+    ) {
+        Assertions.checkState(
+            player != null, "Set player using adsLoader.setPlayer before preparing the player."
+        )
+
+        this.eventListener = eventListener
+        player?.addListener(this)
+
+
+        adPlaybackState = AdPlaybackState(0)
+        adPlaybackState = adPlaybackState?.withAdUri(
+            0,
+            0,
+            Uri.parse("https://file-examples.com/wp-content/uploads/2017/04/file_example_MP4_480_1_5MG.mp4")
+        )
+        updateAdPlaybackState()
+    }
+
+    override fun stop() {
+        if (player == null)
+            return
+    }
+
+    override fun onIsPlayingChanged(isPlaying: Boolean) {
+        Timber.d("${player?.isPlayingAd} /// ${player?.currentAdGroupIndex} /// ${player?.currentAdIndexInAdGroup}")
+    }
+
+    override fun setPlayer(player: Player?) {
+        Assertions.checkState(Looper.getMainLooper() == Looper.myLooper())
+        Assertions.checkState(
+            player == null || player.applicationLooper == Looper.getMainLooper()
+        )
+        this.player = player
+    }
+
+    override fun handlePrepareError(
+        adGroupIndex: Int,
+        adIndexInAdGroup: Int,
+        exception: IOException?
+    ) {
+        Timber.e("AdgroupIndex adGroupIndex:$adGroupIndex adIndexInAdGroup:$adIndexInAdGroup exception: $exception")
+        if (player == null)
+            return
+
+        val uri =
+            adPlaybackState?.adGroups?.getOrNull(adGroupIndex)?.uris?.getOrNull(adIndexInAdGroup)
+        try {
+            handleAdPrepareError(adGroupIndex, adIndexInAdGroup, exception)
+        } catch (e: Exception) {
+            maybeNotifyInternalError(uri, "handlePrepareError", e)
+        }
+
+    }
+
+    private fun maybeNotifyInternalError(uri: Uri?, name: String, cause: Exception) {
+        val message = "Internal error in $name"
+        Timber.e(cause, message)
+        adPlaybackState?.let { aps ->
+
+            // We can't recover from an unexpected error in general, so skip all remaining ads.
+            for (i in 0 until aps.adGroupCount) {
+                adPlaybackState = aps.withSkippedAdGroup(i)
+            }
+            updateAdPlaybackState()
+            uri?.let {
+                eventListener?.onAdLoadError(
+                    AdsMediaSource.AdLoadException.createForUnexpected(
+                        RuntimeException(
+                            message,
+                            cause
+                        )
+                    ),
+                    DataSpec(uri)
+                )
+            }
+        }
+    }
+
+    /** TODO how we have to handle this **/
+    private fun handleAdPrepareError(
+        adGroupIndex: Int,
+        adIndexInAdGroup: Int,
+        exception: IOException?
+    ) {
+
+    }
+
+    private fun updateAdPlaybackState() {
+        eventListener?.onAdPlaybackState(adPlaybackState)
+    }
+
+    override fun setSupportedContentTypes(vararg contentTypes: Int) {
+        val supportedMimeTypes = mutableListOf<String>()
+        for (contentType in contentTypes) {
+            when (contentType) {
+                C.TYPE_DASH -> supportedMimeTypes.add(MimeTypes.APPLICATION_MPD)
+                C.TYPE_HLS -> supportedMimeTypes.add(MimeTypes.APPLICATION_M3U8)
+                C.TYPE_OTHER -> supportedMimeTypes.addAll(
+                    listOf(
+                        MimeTypes.VIDEO_MP4,
+                        MimeTypes.VIDEO_WEBM,
+                        MimeTypes.VIDEO_H263,
+                        MimeTypes.AUDIO_MP4,
+                        MimeTypes.AUDIO_MPEG
+                    )
+                )
+                C.TYPE_SS -> {
+                    // IMA does not support Smooth Streaming ad media.
+                }
+            }
+        }
+        this.supportedMimeTypes = supportedMimeTypes.toList()
+    }
+
+
+    override fun release() {
+        player?.removeListener(this)
+        player = null
+        eventListener = null
+        adPlaybackState = null
+    }
+
+
+}
+

@@ -11,6 +11,7 @@ import com.cristianmg.newplayerivoox.player.engine.EnginePlayerError
 import com.cristianmg.newplayerivoox.player.engine.exoplayer.ExoplayerEngine
 import com.cristianmg.newplayerivoox.player.queue.TracksQueue
 import com.cristianmg.newplayerivoox.player.queue.TracksQueueEngine
+import com.google.android.exoplayer2.ui.PlayerView
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.flow
 import timber.log.Timber
@@ -31,11 +32,12 @@ class PlayerService : Service(), EngineCallback {
         super.onCreate()
         loadEngines()
         engineScope.launch { enginePlayer.initPlayer() }
-/*
-        flow<Long>{
-           return@flow withContext(engineScope.coroutineContext) { enginePlayer.getPlaybackPosition() }
-        }*/
     }
+
+    fun setView(pvExoplayer: PlayerView) {
+        enginePlayer.setView(pvExoplayer)
+    }
+
 
     /**
      * The engine inform that the loading was changed
