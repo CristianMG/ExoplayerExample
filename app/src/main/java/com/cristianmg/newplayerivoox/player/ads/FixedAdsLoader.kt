@@ -1,11 +1,8 @@
 package com.cristianmg.newplayerivoox.player.ads
 
 import android.net.Uri
-import android.os.Handler
 import android.os.Looper
-import com.cristianmg.newplayerivoox.player.Track
 import com.google.android.exoplayer2.C
-import com.google.android.exoplayer2.C.TIME_END_OF_SOURCE
 import com.google.android.exoplayer2.Player
 import com.google.android.exoplayer2.source.ads.AdPlaybackState
 import com.google.android.exoplayer2.source.ads.AdsLoader
@@ -13,18 +10,28 @@ import com.google.android.exoplayer2.source.ads.AdsMediaSource
 import com.google.android.exoplayer2.upstream.DataSpec
 import com.google.android.exoplayer2.util.Assertions
 import com.google.android.exoplayer2.util.MimeTypes
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.launch
 import timber.log.Timber
 import java.io.IOException
+import java.util.*
 
 
 class FixedAdsLoader(
-    private val relatedTrack: Track
+    private val tag: Any,
+    private val preroll: FixedAd? = null,
+    private val midroll: FixedAd? = null,
+    private val postroll: FixedAd? = null,
+    private val loader: (suspend (tag: Any, ad: FixedAd) -> Uri?)
 ) : AdsLoader, Player.EventListener {
 
     private var player: Player? = null
     private var supportedMimeTypes: List<String> = mutableListOf()
     private var eventListener: AdsLoader.EventListener? = null
     private var adPlaybackState: AdPlaybackState? = null
+    private val backgroundScope = CoroutineScope(Dispatchers.IO + Job())
 
     override fun start(
         eventListener: AdsLoader.EventListener,
@@ -38,14 +45,41 @@ class FixedAdsLoader(
         player?.addListener(this)
 
 
-        adPlaybackState = AdPlaybackState(0)
-        adPlaybackState = adPlaybackState?.withAdUri(
-            0,
-            0,
-            Uri.parse("https://file-examples.com/wp-content/uploads/2017/11/file_example_MP3_5MG.mp3")
-        )
+        adPlaybackState = AdPlaybackState(*getAdGroupTimesUs().toLongArray())
         updateAdPlaybackState()
+
+        if (preroll != null) {
+            loadAd(preroll) {
+                adPlaybackState = adPlaybackState?.withAdCount(0, 1)
+                    ?.withAdUri(0, 0, it)
+
+                updateAdPlaybackState()
+            }
+        }
     }
+
+    private fun loadAd(fixedAd: FixedAd, closure: (uri: Uri) -> Unit) {
+        backgroundScope.launch {
+            loader(tag, fixedAd)?.let {
+                closure(it)
+            } ?: kotlin.run {
+                //TODO ad loaded fail
+            }
+        }
+    }
+
+    private fun getAdGroupTimesUs(): List<Long> =
+        mutableListOf<Long>().apply {
+            preroll?.let {
+                add(0)
+            }
+            midroll?.let {
+                add(midroll.progressToFetch ?: 0L * C.MICROS_PER_SECOND)
+            }
+            postroll?.let {
+                add(C.TIME_END_OF_SOURCE)
+            }
+        }.toList()
 
     override fun stop() {
         if (player == null)
@@ -107,7 +141,6 @@ class FixedAdsLoader(
         }
     }
 
-    /** TODO how we have to handle this **/
     private fun handleAdPrepareError(
         adGroupIndex: Int,
         adIndexInAdGroup: Int,
@@ -152,5 +185,26 @@ class FixedAdsLoader(
     }
 
 
+    /**
+     *
+     * @property uuid UUID uuid to identifier the ad
+     * @property adPosition AdPosition the position ad that indicate where the ad should be loaded
+     * @property progressToFetch Int? time to show a midroll audio
+     * @constructor
+     */
+    data class FixedAd(
+        val uuid: UUID = UUID.randomUUID(),
+        val adPosition: AdPosition,
+        val progressToFetch: Long? = null,
+        var isPlayed: Boolean = false
+    )
+
+
+    enum class AdPosition {
+        PRE_ROLL(), MID_ROLL(), POST_ROLL()
+    }
+
 }
+
+
 
