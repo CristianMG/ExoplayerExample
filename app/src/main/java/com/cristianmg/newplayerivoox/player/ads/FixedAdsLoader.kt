@@ -37,13 +37,9 @@ class FixedAdsLoader(
         eventListener: AdsLoader.EventListener,
         adViewProvider: AdsLoader.AdViewProvider?
     ) {
-        Assertions.checkState(
-            player != null, "Set player using adsLoader.setPlayer before preparing the player."
-        )
-
+        Assertions.checkState(player != null, "Set player using adsLoader.setPlayer before preparing the player.")
         this.eventListener = eventListener
         player?.addListener(this)
-
 
         adPlaybackState = AdPlaybackState(*getAdGroupTimesUs().toLongArray())
         updateAdPlaybackState()
@@ -58,6 +54,11 @@ class FixedAdsLoader(
         }
     }
 
+    /**
+     * This function load ad and call closure with the Uri response
+     * @param fixedAd FixedAd
+     * @param closure Function1<[@kotlin.ParameterName] Uri, Unit>
+     */
     private fun loadAd(fixedAd: FixedAd, closure: (uri: Uri) -> Unit) {
         backgroundScope.launch {
             loader(tag, fixedAd)?.let {
