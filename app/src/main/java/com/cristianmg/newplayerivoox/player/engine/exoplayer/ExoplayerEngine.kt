@@ -208,7 +208,10 @@ class ExoplayerEngine(
     }
 
     private fun getAdsLoader(relatedTrack: Track): AdsLoader {
-        return FixedAdsLoader(relatedTrack)
+        return FixedAdsLoader(
+            relatedTrack,
+            preroll = FixedAdsLoader.FixedAd(adPosition = FixedAdsLoader.AdPosition.PRE_ROLL)
+        )
             .apply {
                 adsLoaders.add(this)
                 setPlayer(player)
