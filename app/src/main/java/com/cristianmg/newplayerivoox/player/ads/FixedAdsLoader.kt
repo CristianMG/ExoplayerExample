@@ -6,11 +6,13 @@ import com.google.android.exoplayer2.C
 import com.google.android.exoplayer2.Player
 import com.google.android.exoplayer2.Player.DISCONTINUITY_REASON_AD_INSERTION
 import com.google.android.exoplayer2.Player.DISCONTINUITY_REASON_PERIOD_TRANSITION
+import com.google.android.exoplayer2.Timeline
 import com.google.android.exoplayer2.source.ads.AdPlaybackState
 import com.google.android.exoplayer2.source.ads.AdsLoader
 import com.google.android.exoplayer2.source.ads.AdsMediaSource
 import com.google.android.exoplayer2.upstream.DataSpec
 import com.google.android.exoplayer2.util.Assertions
+import com.google.android.exoplayer2.util.Log
 import com.google.android.exoplayer2.util.MimeTypes
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -60,7 +62,22 @@ class FixedAdsLoader(
     private var eventListener: AdsLoader.EventListener? = null
     private var adPlaybackState: AdPlaybackState? = null
     private val backgroundScope = CoroutineScope(Dispatchers.IO + Job())
+    private var wasPlayingAd: Boolean = false
+    private var timeline: Timeline? = null
+    private var contentDurationMs: Long = C.TIME_UNSET
+    private val period: Timeline.Period = Timeline.Period()
+    private var skippedBeforePlayback = false
 
+    /**
+     * Whether [com.google.ads.interactivemedia.v3.api.AdsLoader.contentComplete] has been
+     * called since starting ad playback.
+     */
+    private var sentContentComplete: Boolean = false
+
+    /** Stores the pending content position when a seek operation was intercepted to play an ad.  */
+    private var pendingContentPositionMs: Long = 0
+    /** Whether [.getContentProgress] has sent [.pendingContentPositionMs] to IMA.  */
+    private var sentPendingContentPositionMs: Boolean = false
     /**
      * Current index ad group
      */
@@ -136,11 +153,36 @@ class FixedAdsLoader(
 
     override fun onPositionDiscontinuity(reason: Int) {
         Timber.d("onPositionDiscontinuity reason:$reason")
-        if (!isPlayingAd) {
-            Timber.d("Marking ad as listen")
-            adPlaybackState =
-                adPlaybackState?.withSkippedAd(currentAdGroupIndex, currentAdIndexInAdGroup)
-            updateAdPlaybackState()
+        if (!isPlayingAd && !wasPlayingAd) {
+            checkForContentComplete()
+            if (sentContentComplete) {
+                Timber.d("Marking ad as listen")
+                for (i in 0 until (adPlaybackState?.adGroupCount ?: 0)) {
+                    if (adPlaybackState?.adGroupTimesUs?.getOrNull(i) != C.TIME_END_OF_SOURCE) {
+                        adPlaybackState = adPlaybackState?.withSkippedAdGroup(i)
+                    }
+                }
+                updateAdPlaybackState()
+            }
+        } else if (timeline?.isEmpty != true) {
+            val positionMs = player!!.currentPosition
+            timeline?.getPeriod(0, period)
+            val newAdGroupIndex = period.getAdGroupIndexForPositionUs(C.msToUs(positionMs))
+            if (newAdGroupIndex != C.INDEX_UNSET) {
+                sentPendingContentPositionMs = false
+                pendingContentPositionMs = positionMs
+            }
+        }
+
+
+        wasPlayingAd = isPlayingAd
+    }
+
+
+    private fun checkForContentComplete() {
+        if (contentDurationMs != C.TIME_UNSET && pendingContentPositionMs == C.TIME_UNSET && !sentContentComplete
+        ) {
+            sentContentComplete = true
         }
     }
 
@@ -155,6 +197,48 @@ class FixedAdsLoader(
     private fun getAdGroupTimesUs(): List<Long> =
         ads.map { it.progressToFetch }
 
+
+    override fun onTimelineChanged(timeline: Timeline, @Player.TimelineChangeReason reason: Int) {
+        if (timeline.isEmpty) {
+            // The player is being reset or contains no media.
+            return
+        }
+        Assertions.checkArgument(timeline.periodCount == 1)
+        this.timeline = timeline
+        val contentDurationUs = timeline.getPeriod(0, period).durationUs
+        contentDurationMs = C.usToMs(contentDurationUs)
+        if (contentDurationUs != C.TIME_UNSET) {
+            adPlaybackState = adPlaybackState?.withContentDurationUs(contentDurationUs)
+        }
+
+        if (!skippedBeforePlayback) {
+            skippedBeforePlayback = true
+            skippedBeforePlayback()
+        }
+        onPositionDiscontinuity(Player.DISCONTINUITY_REASON_INTERNAL)
+    }
+
+
+
+    private fun skippedBeforePlayback(){
+        // Skip ads based on the start position as required.
+        val adGroupTimesUs = adPlaybackState?.adGroupTimesUs
+        val contentPositionMs = player!!.contentPosition
+        val adGroupIndexForPosition =
+            adPlaybackState?.getAdGroupIndexForPositionUs(C.msToUs(contentPositionMs))
+        if (adGroupIndexForPosition!=null && adGroupTimesUs!=null &&
+            adGroupIndexForPosition > 0 && adGroupIndexForPosition != C.INDEX_UNSET) {
+            // Skip any ad groups before the one at or immediately before the playback position.
+            for (i in 0 until adGroupIndexForPosition) {
+                adPlaybackState = adPlaybackState?.withSkippedAdGroup(i)
+            }
+            // Play ads after the midpoint between the ad to play and the one before it, to avoid issues
+            // with rounding one of the two ad times.
+            val adGroupForPositionTimeUs = adGroupTimesUs[adGroupIndexForPosition]
+            val adGroupBeforeTimeUs = adGroupTimesUs[adGroupIndexForPosition - 1]
+            val midpointTimeUs = (adGroupForPositionTimeUs + adGroupBeforeTimeUs) / 2.0
+        }
+    }
     override fun handlePrepareError(
         adGroupIndex: Int,
         adIndexInAdGroup: Int,
