@@ -12,10 +12,7 @@ import com.cristianmg.newplayerivoox.player.ads.FixedAdsLoader
 import com.cristianmg.newplayerivoox.player.engine.EngineCallback
 import com.cristianmg.newplayerivoox.player.engine.EnginePlayer
 import com.cristianmg.newplayerivoox.player.queue.TracksQueueEngine
-import com.google.android.exoplayer2.ExoPlaybackException
-import com.google.android.exoplayer2.Player
-import com.google.android.exoplayer2.SimpleExoPlayer
-import com.google.android.exoplayer2.Timeline
+import com.google.android.exoplayer2.*
 import com.google.android.exoplayer2.database.ExoDatabaseProvider
 import com.google.android.exoplayer2.ext.okhttp.OkHttpDataSourceFactory
 import com.google.android.exoplayer2.source.MediaSource
@@ -210,7 +207,16 @@ class ExoplayerEngine(
     private fun getAdsLoader(relatedTrack: Track): AdsLoader {
         return FixedAdsLoader(
             relatedTrack,
-            preroll = FixedAdsLoader.FixedAd(adPosition = FixedAdsLoader.AdPosition.PRE_ROLL)
+            listOf(
+//                FixedAdsLoader.FixedAd(
+//                    adPosition = FixedAdsLoader.AdPosition.PRE_ROLL,
+//                    progressToFetch = 0L
+//                ),
+                FixedAdsLoader.FixedAd(
+                    adPosition = FixedAdsLoader.AdPosition.MID_ROLL,
+                    progressToFetch = 70L * C.MICROS_PER_SECOND
+                )
+            )
         )
             .apply {
                 adsLoaders.add(this)

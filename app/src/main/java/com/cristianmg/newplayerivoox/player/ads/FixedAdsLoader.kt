@@ -4,12 +4,13 @@ import android.net.Uri
 import android.os.Looper
 import com.google.android.exoplayer2.C
 import com.google.android.exoplayer2.Player
+import com.google.android.exoplayer2.Player.DISCONTINUITY_REASON_AD_INSERTION
+import com.google.android.exoplayer2.Player.DISCONTINUITY_REASON_PERIOD_TRANSITION
 import com.google.android.exoplayer2.source.ads.AdPlaybackState
 import com.google.android.exoplayer2.source.ads.AdsLoader
 import com.google.android.exoplayer2.source.ads.AdsMediaSource
 import com.google.android.exoplayer2.upstream.DataSpec
 import com.google.android.exoplayer2.util.Assertions
-import com.google.android.exoplayer2.util.Log
 import com.google.android.exoplayer2.util.MimeTypes
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -20,11 +21,38 @@ import java.io.IOException
 import java.util.*
 
 
+/**
+ * I have some doubts about the FixedAdsLoader implementation.
+
+The most important.
+
+1) Why adsPlayback has ads groups?
+I can understant that this can be a require to implementation the ImaExtension.
+To ilustrate better, I have multiple ads, this ads are distributed across the timeline of my track.
+It would be correct make a ad group for each ad? or
+It would be better split my ads in three groups? for example, preroll,midroll,postroll.
+
+What is the properly option?
+
+I was watching the ImaAdsLoader, in this loader the ads are distributed across the track int the "cuepoints".
+
+
+ * @property tag Any
+ * @property ads List<FixedAd>
+ * @property player Player?
+ * @property supportedMimeTypes List<String>
+ * @property eventListener EventListener?
+ * @property adPlaybackState AdPlaybackState?
+ * @property backgroundScope CoroutineScope
+ * @property currentAdGroupIndex Int
+ * @property currentAdIndexInAdGroup Int
+ * @property isPlayingAd Boolean
+ * @constructor
+ */
+
 class FixedAdsLoader(
     private val tag: Any,
-    private val preroll: FixedAd? = null,
-    private val midroll: FixedAd? = null,
-    private val postroll: FixedAd? = null
+    private val ads: List<FixedAd> = mutableListOf()
 ) : AdsLoader, Player.EventListener {
 
     private var player: Player? = null
@@ -32,6 +60,25 @@ class FixedAdsLoader(
     private var eventListener: AdsLoader.EventListener? = null
     private var adPlaybackState: AdPlaybackState? = null
     private val backgroundScope = CoroutineScope(Dispatchers.IO + Job())
+
+    /**
+     * Current index ad group
+     */
+    private val currentAdGroupIndex: Int
+        get() = player?.currentAdGroupIndex ?: C.INDEX_UNSET
+
+
+    /**
+     * Current index ad group if it is sound now
+     */
+    private val currentAdIndexInAdGroup: Int
+        get() = player?.currentAdIndexInAdGroup ?: C.INDEX_UNSET
+
+    /**
+     * Is currently player playing ad
+     */
+    private val isPlayingAd: Boolean
+        get() = player?.isPlayingAd ?: false
 
     override fun start(
         eventListener: AdsLoader.EventListener,
@@ -47,10 +94,14 @@ class FixedAdsLoader(
         adPlaybackState = AdPlaybackState(*getAdGroupTimesUs().toLongArray())
         updateAdPlaybackState()
 
-        if (preroll != null) {
-            loadAd(preroll) {
-                adPlaybackState = adPlaybackState?.withAdCount(0, 1)
-                    ?.withAdUri(0, 0, it)
+        /**
+         * Added all ads in each position
+         */
+        ads.forEachIndexed { index, ads ->
+            adPlaybackState = adPlaybackState?.withAdCount(index, 1)
+            updateAdPlaybackState()
+            loadAd(ads) {
+                adPlaybackState = adPlaybackState?.withAdUri(index, 0, it)
                 updateAdPlaybackState()
             }
         }
@@ -59,7 +110,7 @@ class FixedAdsLoader(
     /**
      * This function load ad and call closure with the Uri response
      * @param fixedAd FixedAd
-     * @param closure Function1<[@kotlin.ParameterName] Uri, Unit>
+     * @param closure (uri: Uri) -> Unit
      */
     private fun loadAd(fixedAd: FixedAd, closure: (uri: Uri) -> Unit) {
         backgroundScope.launch {
@@ -67,30 +118,34 @@ class FixedAdsLoader(
                 loader(tag, fixedAd)?.let {
                     closure(it)
                 } ?: kotlin.run {
-
+                    handleAdGroupLoadError(
+                        IllegalStateException("Ads loader error"),
+                        fixedAd.progressToFetch.toInt()
+                    )
                 }
-            }catch (e:java.lang.Exception){
-                Timber.e(e,"The ad cannot be loaded")
+            } catch (e: java.lang.Exception) {
+                Timber.e(e, "The ad cannot be loaded")
+                handleAdGroupLoadError(
+                    IllegalStateException("Ads loader error"),
+                    fixedAd.progressToFetch.toInt()
+                )
             }
         }
     }
 
 
-    /**
-     * Load ad with delay to simulate the petition to server
-     * @param tag Any
-     * @param ad FixedAd
-     * @return Uri?
-     */
-    private suspend fun loader(tag: Any, ad: FixedAd): Uri? {
-        Timber.d("Start to load ad tag:$tag ad$ad")
-        Thread.sleep(3000)
-        Timber.d("Finish to load ad tag:$tag ad$ad")
-        return when (ad.adPosition) {
-            AdPosition.PRE_ROLL -> Uri.parse("https://file-examples.com/wp-content/uploads/2017/11/file_example_MP3_700KB.mp3")
-            AdPosition.MID_ROLL -> Uri.parse("https://file-examples.com/wp-content/uploads/2017/11/file_example_MP3_1MG.mp3")
-            AdPosition.POST_ROLL -> Uri.parse("https://file-examples.com/wp-content/uploads/2017/11/file_example_MP3_2MG.mp3")
+    override fun onPositionDiscontinuity(reason: Int) {
+        Timber.d("onPositionDiscontinuity reason:$reason")
+        if (!isPlayingAd) {
+            Timber.d("Marking ad as listen")
+            adPlaybackState =
+                adPlaybackState?.withSkippedAd(currentAdGroupIndex, currentAdIndexInAdGroup)
+            updateAdPlaybackState()
         }
+    }
+
+    override fun onPlayerStateChanged(playWhenReady: Boolean, playbackState: Int) {
+        Timber.d("onPlayerStateChanged playWhenReady:$playWhenReady playbackState:$playbackState")
     }
 
     /**
@@ -98,12 +153,7 @@ class FixedAdsLoader(
      * @return List<Long> list with group of ads
      */
     private fun getAdGroupTimesUs(): List<Long> =
-        mutableListOf<Long>().apply {
-            preroll?.let { add(0) }
-            midroll?.let { add(midroll.progressToFetch ?: 0L * C.MICROS_PER_SECOND) }
-            postroll?.let { add(C.TIME_END_OF_SOURCE) }
-        }.toList()
-
+        ads.map { it.progressToFetch }
 
     override fun handlePrepareError(
         adGroupIndex: Int,
@@ -130,7 +180,7 @@ class FixedAdsLoader(
     private fun maybeNotifyInternalError(uri: Uri?, name: String, cause: Exception) {
         val message = "Internal error in $name"
         Timber.e(cause, message)
-        if(adPlaybackState == null)
+        if (adPlaybackState == null)
             adPlaybackState = AdPlaybackState.NONE
 
         adPlaybackState?.let { aps ->
@@ -167,8 +217,14 @@ class FixedAdsLoader(
         updateAdPlaybackState()
     }
 
-    private fun handleAdGroupLoadError(error: Exception) {
-        //adPlaybackState = adPlaybackState?.withSkippedAdGroup()
+    private fun handleAdGroupLoadError(error: java.lang.RuntimeException, adGroupIndex: Int) {
+        adPlaybackState?.adGroups?.getOrNull(adGroupIndex)?.let { adGroup ->
+            for (i in 0 until adGroup.count) {
+                Timber.d("Marking ad as error loaded groupIndex: $adGroupIndex indexAd:$i")
+                adPlaybackState = adPlaybackState?.withAdLoadError(adGroupIndex, i)
+            }
+        }
+        updateAdPlaybackState()
     }
 
     private fun updateAdPlaybackState() {
@@ -185,6 +241,19 @@ class FixedAdsLoader(
         player = null
         eventListener = null
         adPlaybackState = null
+    }
+
+    /**
+     * Load ad with delay to simulate the petition to server
+     * @param tag Any
+     * @param ad FixedAd
+     * @return Uri?
+     */
+    private suspend fun loader(tag: Any, ad: FixedAd): Uri? {
+        Timber.d("Start to load ad tag:$tag ad$ad")
+        Thread.sleep(3000)
+        Timber.d("Finish to load ad tag:$tag ad$ad")
+        return Uri.parse("https://file-examples.com/wp-content/uploads/2017/11/file_example_MP3_700KB.mp3")
     }
 
     override fun setSupportedContentTypes(vararg contentTypes: Int) {
@@ -228,13 +297,13 @@ class FixedAdsLoader(
     data class FixedAd(
         val uuid: UUID = UUID.randomUUID(),
         val adPosition: AdPosition,
-        val progressToFetch: Long? = null,
+        val progressToFetch: Long,
         var isPlayed: Boolean = false
     )
 
 
     enum class AdPosition {
-        PRE_ROLL(), MID_ROLL(), POST_ROLL()
+        PRE_ROLL, MID_ROLL, POST_ROLL
     }
 
 }
